@@ -155,7 +155,7 @@ def compute_control_input(agent_states, current_agent, desired_velocity, safety_
     # Extract solution
     current_input = np.array([sol['x'][0], sol['x'][1]])
         
-    return current_input, u_nom, all_h
+    return current_input, u_nom, all_h.tolist()
 
 class CFController(Node):
 
@@ -172,7 +172,7 @@ class CFController(Node):
 
         self.position = np.array([.0, .0, .0])
         self.other_poses = {}
-        self.rate = 0.05
+        self.rate = 0.02
         self.it = 0
         self.true_timestep = 0
 
@@ -208,21 +208,7 @@ class CFController(Node):
 
         self.cf_pos = []
 
-        pos_pub1 = self.create_publisher(Marker, f'nebolab/cf1/sensing_range', 1)
-        #pos_pub2 = self.create_publisher(Marker, f'nebolab/cf2/sensing_range', 1)
-        pos_pub3 = self.create_publisher(Marker, f'nebolab/cf3/sensing_range', 1)
-        #pos_pub4 = self.create_publisher(Marker, f'nebolab/cf4/sensing_range', 1)
-        pos_pub5 = self.create_publisher(Marker, f'nebolab/cf5/sensing_range', 1)
-        #pos_pub6 = self.create_publisher(Marker, f'nebolab/cf6/sensing_range', 1)
-
-        self.pos_pub_dict = {
-            "cf1": pos_pub1, 
-            #"cf2": pos_pub2,
-            "cf3": pos_pub3,
-            #"cf4": pos_pub4,
-            "cf5": pos_pub5,
-            #"cf6": pos_pub6,
-        }
+        self.pos_pub_dict = {}
 
         # -------------------------------------------------------------------------------------------
 
@@ -231,23 +217,41 @@ class CFController(Node):
         self.takeoff_client = self.create_client(Trigger, f"nebolab/allcfs/takeoff")
         self.land_client = self.create_client(Trigger, f"nebolab/allcfs/land")
 
-        land_client_cf1 = self.create_client(Trigger, f"nebolab/cf1/land")
-        #land_client_cf2 = self.create_client(Trigger, f"nebolab/cf2/land")
-        land_client_cf3 = self.create_client(Trigger, f"nebolab/cf3/land")
-        #land_client_cf4 = self.create_client(Trigger, f"nebolab/cf4/land")
-        land_client_cf5 = self.create_client(Trigger, f"nebolab/cf5/land")
-        #land_client_cf6 = self.create_client(Trigger, f"nebolab/cf6/land")
-        #land_client_cfa = self.create_client(Trigger, f"nebolab/cfa/land")
+        self.landing_dict = {}
 
-        self.landing_dict = {
-            "cf1": land_client_cf1, 
-            #"cf2": land_client_cf2,
-            "cf3": land_client_cf3,
-            #"cf4": land_client_cf4,
-            "cf5": land_client_cf5,
-            #"cf6": land_client_cf6,
-            #"cfa": land_client_cfa
-        }
+        if "cf1" in self.CF_DICT:
+            pos_pub1 = self.create_publisher(Marker, f'nebolab/cf1/sensing_range', 1)
+            land_client_cf1 = self.create_client(Trigger, f"nebolab/cf1/land")
+            self.pos_pub_dict["cf1"] = pos_pub1
+            self.landing_dict["cf1"] = land_client_cf1
+        if "cf2" in self.CF_DICT:
+            pos_pub2 = self.create_publisher(Marker, f'nebolab/cf2/sensing_range', 1)
+            land_client_cf2 = self.create_client(Trigger, f"nebolab/cf2/land")
+            self.pos_pub_dict["cf2"] = pos_pub2
+            self.landing_dict["cf2"] = land_client_cf2
+        if "cf3" in self.CF_DICT:
+            pos_pub3 = self.create_publisher(Marker, f'nebolab/cf3/sensing_range', 1)
+            land_client_cf3 = self.create_client(Trigger, f"nebolab/cf3/land")
+            self.pos_pub_dict["cf3"] = pos_pub3
+            self.landing_dict["cf3"] = land_client_cf3
+        if "cf4" in self.CF_DICT:
+            pos_pub4 = self.create_publisher(Marker, f'nebolab/cf4/sensing_range', 1)
+            land_client_cf4 = self.create_client(Trigger, f"nebolab/cf4/land")
+            self.pos_pub_dict["cf4"] = pos_pub4
+            self.landing_dict["cf4"] = land_client_cf4
+        if "cf5" in self.CF_DICT:
+            pos_pub5 = self.create_publisher(Marker, f'nebolab/cf5/sensing_range', 1)
+            land_client_cf5 = self.create_client(Trigger, f"nebolab/cf5/land")
+            self.pos_pub_dict["cf5"] = pos_pub5
+            self.landing_dict["cf5"] = land_client_cf5
+        if "cf6" in self.CF_DICT:
+            pos_pub6 = self.create_publisher(Marker, f'nebolab/cf6/sensing_range', 1)
+            land_client_cf6 = self.create_client(Trigger, f"nebolab/cf6/land")
+            self.pos_pub_dict["cf6"] = pos_pub6
+            self.landing_dict["cf6"] = land_client_cf6
+
+        self.land = True
+        self. h_funcs = []
 
         self.get_logger().info("Waiting for takeoff & land services to be available...")
         if not self.takeoff_client.wait_for_service(10.0):
@@ -267,7 +271,7 @@ class CFController(Node):
         # Area: x: 2.5m, y: 1.4m (*2)
 
         # Define a 1-by-1 2D search space
-        self.L_list = np.array([2.4, 2.4]) # Set total range for x and y axis 2 (-1 to 1)
+        self.L_list = np.array([2.5, 2.5]) # Set total range for x and y axis 2 (-1 to 1)
         
         # Discretize the search space
         grids_x, grids_y = np.meshgrid(np.linspace(0, self.L_list[0], 100), np.linspace(0, self.L_list[1], 100))
@@ -284,10 +288,10 @@ class CFController(Node):
         self.num_agents = len(self.CF_DICT)
 
         self.trajectories = {}
+        self.control_inputs = {}
         for agent in self.CF_DICT.keys():
-            self.trajectories[agent] = [[],[]]
-
-        import json
+            self.trajectories[agent] = [[],[],[]]
+            self.control_inputs[agent] = [[],[]]
 
         # Open and read the JSON file
         with open('/home/localadmin/points.json', 'r') as file:
@@ -328,8 +332,8 @@ class CFController(Node):
         self.umax = 0.30  # desired velocity 0.3 m/s
         self.safety_distance = 0.30  # Safety distance for collision avoidance
 
-        self.gamma = 1  # CBF parameter
-        self.h_pow = 2  # CBF parameter
+        self.gamma = 10  # CBF parameter
+        self.h_pow = 3  # CBF parameter
 
         self.ck_list_updates = np.zeros(self.ks.shape[0])
 
@@ -375,16 +379,22 @@ class CFController(Node):
                 cmd_vel_msg.linear.z = 0.0
                 self.ros_pubs[cfname].publish(cmd_vel_msg)
         
-        elif self.true_timestep > 100:
+        elif self.true_timestep > 250:
 
+            if self.it >= 1000 and self.land == True:
+                self.landing_dict["cf1"].call_async(Trigger.Request())
+                self.land = False
+        
             ut_dict = {}
             #print("Positions: " + str(xt))
 
             for agent, position in xt.items():
 
+                self.trajectories[agent][0].append(position[0])
+                self.trajectories[agent][1].append(position[1])
+                self.trajectories[agent][2].append(position[2])
+
                 if position[2] > 0.5:
-                    #self.trajectories[agent][0].append(position[0])
-                    #self.trajectories[agent][1].append(position[1])
 
                     #----------------------For RViz: drone trace publisher-----------------------------------------
                     scale_variable_x = 1/(self.L_list[0]/99)
@@ -460,10 +470,14 @@ class CFController(Node):
             
                     # input CBF:
                     ut, u_nom, all_h = compute_control_input(xt, agent, ut, self.safety_distance, self.gamma, self.h_pow, self.umax, self.CF_DICT, self.L_list)
+                    self.h_funcs.append(all_h)
 
                     #print(np.linalg.norm(ut), self.umax, agent)
                     self.get_logger().info(f"{ut}, {agent}.")
                     ut_dict[agent] = ut
+
+                    self.control_inputs[agent][0].append(ut[0])
+                    self.control_inputs[agent][1].append(ut[1])
 
                 else:
                     if self.CF_DICT[agent] != "inactive":
@@ -504,7 +518,26 @@ class CFController(Node):
 
             exit()  # Force Exit
 
-def plot_trajectories(grids, ks, agent_ck_lists, tsteps, dt, hk_list, L_list, grids_x, grids_y, pdf_values, num_agents, agent_trajectories, metric_logs):
+def plot_trajectories(grids, ks, agent_ck_lists, tsteps, dt, hk_list, L_list, grids_x, grids_y, pdf_values, num_agents, agent_trajectories, metric_logs, control_inputs):
+
+    plt.rcParams['xtick.labelsize']=16
+    plt.rcParams['ytick.labelsize']=16
+    plt.rcParams['axes.titlesize']=16
+    plt.rcParams['axes.labelsize']=16
+    plt.rcParams['legend.fontsize']=16
+    plt.rcParams['lines.linewidth']=3
+
+    """# Make sure all arrays have the same length
+    min_length = min([len(metric_logs)] + 
+                    [len(control_inputs[agent][0]) for agent in control_inputs] +
+                    [len(agent_trajectories[agent][0]) for agent in agent_trajectories])
+    
+    # Calculate how many complete sets of agent metrics we have
+    num_complete_timesteps = len(metric_logs) // num_agents
+    
+    # Create time arrays of consistent length
+    time_in_seconds = np.arange(min_length) * dt
+    metric_time = np.arange(num_complete_timesteps) * dt"""
 
     phi_recon = np.zeros(grids.shape[0])
     for i, (k_vec, ck, hk) in enumerate(zip(ks, agent_ck_lists/(tsteps*dt), hk_list)):
@@ -515,7 +548,8 @@ def plot_trajectories(grids, ks, agent_ck_lists, tsteps, dt, hk_list, L_list, gr
     plt.figure(figsize=(10, 6))
     for i in range(1):
         plt.plot(metric_logs[0::num_agents], label=f'Total ergodic metric')
-    plt.xlabel('Time Step')
+    #plt.xticks([x * dt for x in metric_logs[0::num_agents]])
+    plt.xlabel('t [s]')
     plt.ylabel('Ergodic Metric')
     plt.title('Ergodic Metric Over Time')
     plt.legend()
@@ -534,8 +568,12 @@ def plot_trajectories(grids, ks, agent_ck_lists, tsteps, dt, hk_list, L_list, gr
     colors = ['C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7', 'C8']
     i = 0
     for agent in agent_trajectories.keys():
-        ax.plot(agent_trajectories[agent][0], agent_trajectories[agent][1], linestyle='-', marker='', color=colors[i], alpha=0.2, label=f'Agent {i+1}')
-        ax.plot(agent_trajectories[agent][0][0], agent_trajectories[agent][1][0], linestyle='', marker='o', markersize=15, color=colors[i], alpha=1.0, label=f'Agent {i+1} Start')
+        # Check if trajectory data exists before plotting
+        if agent_trajectories[agent][0] and agent_trajectories[agent][1]:  # Check if lists are not empty
+            ax.plot(agent_trajectories[agent][0], agent_trajectories[agent][1], linestyle='-', marker='', color=colors[i], alpha=0.2, label=f'Drone {i+1}')
+            ax.plot(agent_trajectories[agent][0][0], agent_trajectories[agent][1][0], linestyle='', marker='o', markersize=15, color=colors[i], alpha=1.0, label=f'Drone {i+1} start')
+        else:
+            print(f"Warning: No trajectory data for drone {agent}")
         i += 1
     ax.legend(loc='best')
 
@@ -547,12 +585,18 @@ def plot_trajectories(grids, ks, agent_ck_lists, tsteps, dt, hk_list, L_list, gr
     ax.contourf(grids_x, grids_y, phi_recon.reshape(grids_x.shape), cmap='Blues')
     i = 0
     for agent in agent_trajectories.keys():
-        ax.plot(agent_trajectories[agent][0], agent_trajectories[agent][1], linestyle='-', marker='', color=colors[i], alpha=0.2, label=f'Agent {i+1}')
-        ax.plot(agent_trajectories[agent][0][0], agent_trajectories[agent][1][0], linestyle='', marker='o', markersize=15, color=colors[i], alpha=1.0, label=f'Agent {i+1} Start')
+        # Check if trajectory data exists before plotting
+        if agent_trajectories[agent][0] and agent_trajectories[agent][1]:  # Check if lists are not empty
+            ax.plot(agent_trajectories[agent][0], agent_trajectories[agent][1], linestyle='-', marker='', color=colors[i], alpha=0.2, label=f'Drone {i+1}')
+            ax.plot(agent_trajectories[agent][0][0], agent_trajectories[agent][1][0], linestyle='', marker='o', markersize=15, color=colors[i], alpha=1.0, label=f'Drone {i+1} start')
+        else:
+            print(f"Warning: No trajectory data for drone {agent}")
         i += 1
     ax.legend(loc='best')
 
     plt.show()
+
+    return phi_recon
 
 def plot_rviz(x, y, pdf, broken_sensors_pub, time, L_list):
         # For RViz: broken sensor publisher
@@ -605,20 +649,35 @@ def main(args=None):
     except (SystemExit, KeyboardInterrupt) as e:
         rclpy.logging.get_logger("CF_CONTROLLER_EXAMPLE").info('Done')
 
-    # Plot the ergodic metric for all agents
-    plt.figure(figsize=(10, 6))
-    for i in range(1):
-        plt.plot(cfcontroller.metric_logs[0::cfcontroller.num_agents], label=f'Total ergodic metric')
-    plt.xlabel('Time Step')
-    plt.ylabel('Ergodic Metric')
-    plt.title('Ergodic Metric Over Time')
-    plt.legend()
-    plt.grid(True)
-    plt.show()
+    phi_recon = plot_trajectories(cfcontroller.grids, cfcontroller.ks, cfcontroller.ck_list_updates, cfcontroller.it, cfcontroller.rate,
+                      cfcontroller.hk_list, cfcontroller.L_list, cfcontroller.grids_x, cfcontroller.grids_y, cfcontroller.pdf_values,
+                      cfcontroller.num_agents, cfcontroller.trajectories, cfcontroller.metric_logs, cfcontroller.control_inputs)
 
-    #plot_trajectories(cfcontroller.grids, cfcontroller.ks, cfcontroller.ck_list_updates, cfcontroller.it, cfcontroller.rate,
-                      #cfcontroller.hk_list, cfcontroller.L_list, cfcontroller.grids_x, cfcontroller.grids_y, cfcontroller.pdf_values,
-                      #cfcontroller.num_agents, cfcontroller.trajectories, cfcontroller.metric_logs)
+    # Saved data in JSON
+
+    data_to_save = {
+        "trajectories": cfcontroller.trajectories,
+        "control_inputs": cfcontroller.control_inputs,
+        "ergodic_metrics": cfcontroller.metric_logs,
+        "pdf_values": cfcontroller.pdf_values.tolist(),
+        "phi_recon": phi_recon.tolist(),
+        "grids_x": cfcontroller.grids_x.tolist(),
+        "grids_y": cfcontroller.grids_y.tolist(),
+        "ks": cfcontroller.ks.tolist(),
+        "h_funcs": cfcontroller.h_funcs,
+        "parameters": {
+            "rate": cfcontroller.rate,
+            "umax": cfcontroller.umax,
+            "safety_distance": cfcontroller.safety_distance,
+            "gamma": cfcontroller.gamma,
+            "h_pow": cfcontroller.h_pow,
+            "L_list": cfcontroller.L_list.tolist(),
+            "num_agents": cfcontroller.num_agents
+        }
+    }
+
+    with open('/home/localadmin/ergodic_test_record.json', 'w') as out:
+        json.dump(data_to_save, out, indent=4)
 
     cfcontroller.land_client.call_async(Trigger.Request())
     # Destroy the node explicitly
@@ -627,7 +686,6 @@ def main(args=None):
 
     cfcontroller.destroy_node()
     rclpy.shutdown()
-
 
 if __name__ == '__main__':
     main()
