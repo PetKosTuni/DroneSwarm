@@ -89,7 +89,7 @@ def compute_control_input(agent_states, current_agent, desired_velocity, safety_
 
     current_state = agent_states[current_agent][:-1]
     threat_radius = 0.6
-    wall_safety_distance = 0.15
+    wall_safety_distance = 0.17
     
     # Nominal control (constant desired velocity)
     u_nom = desired_velocity
@@ -271,7 +271,7 @@ class CFController(Node):
         # Area: x: 2.5m, y: 1.4m (*2)
 
         # Define a 1-by-1 2D search space
-        self.L_list = np.array([2.5, 2.5]) # Set total range for x and y axis 2 (-1 to 1)
+        self.L_list = np.array([3, 3]) # Set total range for x and y axis 2 (-1 to 1)
         
         # Discretize the search space
         grids_x, grids_y = np.meshgrid(np.linspace(0, self.L_list[0], 100), np.linspace(0, self.L_list[1], 100))
@@ -330,7 +330,7 @@ class CFController(Node):
 
         # Specify the dynamic system
         self.umax = 0.30  # desired velocity 0.3 m/s
-        self.safety_distance = 0.30  # Safety distance for collision avoidance
+        self.safety_distance = 0.2  # Safety distance for collision avoidance
 
         self.gamma = 10  # CBF parameter
         self.h_pow = 3  # CBF parameter
@@ -382,7 +382,7 @@ class CFController(Node):
         elif self.true_timestep > 250:
 
             if self.it >= 1000 and self.land == True:
-                self.landing_dict["cf1"].call_async(Trigger.Request())
+                self.landing_dict["cf3"].call_async(Trigger.Request())
                 self.land = False
         
             ut_dict = {}
@@ -483,6 +483,11 @@ class CFController(Node):
                     if self.CF_DICT[agent] != "inactive":
                         self.landing_dict[agent].call_async(Trigger.Request())
                         self.CF_DICT[agent] = "inactive"
+                        if self.num_agents > 1:
+                            self.num_agents -= 1
+                        else:
+                            self.stop = True
+
 
             for cfname, active in self.CF_DICT.items():
                 cmd_vel_msg = Twist()
@@ -527,6 +532,7 @@ def plot_trajectories(grids, ks, agent_ck_lists, tsteps, dt, hk_list, L_list, gr
     plt.rcParams['legend.fontsize']=16
     plt.rcParams['lines.linewidth']=3
 
+
     """# Make sure all arrays have the same length
     min_length = min([len(metric_logs)] + 
                     [len(control_inputs[agent][0]) for agent in control_inputs] +
@@ -555,6 +561,150 @@ def plot_trajectories(grids, ks, agent_ck_lists, tsteps, dt, hk_list, L_list, gr
     plt.legend()
     plt.grid(True)
     plt.show()
+
+    # Plot the control inputs for all agents
+    fig, axes = plt.subplots(num_agents, 1, figsize=(10, 4*num_agents), sharex=True)
+
+    i = 0
+    for agent in control_inputs.keys():
+
+        drone_index = str(agent).replace('cf', '')
+        if drone_index == '3':
+            drone_index = 2
+        elif drone_index == '5':
+            drone_index = 3
+
+        if num_agents == 1:
+            axes.plot(control_inputs[agent][0], label='u_x')
+            axes.plot(control_inputs[agent][1], label='u_y')
+            axes.set_ylabel(f'Drone {drone_index} control input')
+            axes.legend()
+            axes.grid(True)
+            #axes.set_xticklabels(f[x * dt for x in len(control_inputs[agent][0])])
+            axes.set_xlabel('t [s]')
+        else:
+            axes[i].plot(control_inputs[agent][0], label='u_x')
+            axes[i].plot(control_inputs[agent][1], label='u_y')
+            axes[i].set_ylabel(f'Drone {drone_index} control input')
+            axes[i].legend()
+            axes[i].grid(True)
+            #axes[-1].xticks([x * dt for x in len(control_inputs[agent][0])])
+            axes[-1].set_xlabel('t [s]')
+            i += 1
+
+    plt.suptitle('Control Inputs Over Time')
+    plt.tight_layout()
+    plt.show()
+
+    # Plot xyz-coordinates for all agents
+    fig, axes = plt.subplots(3, 1, figsize=(10, 4*num_agents), sharex=True)
+
+    for agent in agent_trajectories.keys():
+
+        drone_index = str(agent).replace('cf', '')
+        if drone_index == '3':
+            drone_index = 2
+        elif drone_index == '5':
+            drone_index = 3
+
+        axes[0].plot(agent_trajectories[agent][0], label=f'Drone {drone_index}')
+        axes[0].set_ylabel('X-coordinate')
+        axes[0].legend()
+        axes[0].grid(True)
+        #axes[-1].xticks([x * dt for x in len(agent_trajectories[agent][0])])
+        axes[-1].set_xlabel('t [s]')
+
+        axes[1].plot(agent_trajectories[agent][1], label=f'Drone {drone_index}')
+        axes[1].set_ylabel('Y-coordinate')
+        axes[1].legend()
+        axes[1].grid(True)
+        #axes[-1].xticks([x * dt for x in len(agent_trajectories[agent][0])])
+        axes[-1].set_xlabel('t [s]')
+
+        axes[2].plot(agent_trajectories[agent][2], label=f'Drone {drone_index}')
+        axes[2].set_ylabel('Z-coordinate')
+        axes[2].legend()
+        axes[2].grid(True)
+        #axes[-1].xticks([x * dt for x in len(agent_trajectories[agent][0])])
+        axes[-1].set_xlabel('t [s]')
+
+    plt.suptitle('Individual plotting of XYZ-coordinates')
+    plt.tight_layout()
+    plt.show()
+
+    # Plot XYZ-distances between all agents
+    fig, axes = plt.subplots(3, 1, figsize=(10, 4*num_agents), sharex=True)
+
+    remove_from_comparison = []
+    for agent in agent_trajectories.keys():
+
+        for other_agents in agent_trajectories.keys():
+
+            if agent != other_agents and other_agents not in remove_from_comparison:
+
+                axes[0].plot(np.abs(np.array(agent_trajectories[agent][0]) - np.array(agent_trajectories[other_agents][0])), label=f'||x_{agent} - x_{other_agents}||')
+                axes[0].set_ylabel('X-coordinate distances')
+                axes[0].legend()
+                axes[0].grid(True)
+                #axes[-1].xticks([x * dt for x in len(agent_trajectories[agent][0])])
+                axes[-1].set_xlabel('t [s]')
+
+                axes[1].plot(np.abs(np.array(agent_trajectories[agent][1]) - np.array(agent_trajectories[other_agents][1])), label=f'||y_{agent} - y_{other_agents}||')
+                axes[1].set_ylabel('Y-coordinate distances')
+                axes[1].legend()
+                axes[1].grid(True)
+                #axes[-1].xticks([x * dt for x in len(agent_trajectories[agent][0])])
+                axes[-1].set_xlabel('t [s]')
+
+                axes[2].plot(np.abs(np.array(agent_trajectories[agent][2]) - np.array(agent_trajectories[other_agents][2])), label=f'||z_{agent} - z_{other_agents}||')
+                axes[2].set_ylabel('Z-coordinate distances')
+                axes[2].legend()
+                axes[2].grid(True)
+                #axes[-1].xticks([x * dt for x in len(agent_trajectories[agent][0])])
+                axes[-1].set_xlabel('t [s]')
+
+        remove_from_comparison.append(agent)
+    
+    plt.suptitle('Plotting of XYZ-distances between all drones')
+    plt.tight_layout()
+    plt.show()
+
+    # Plot distances between all agents
+
+    if num_agents > 1:
+        plots = (num_agents * (num_agents - 1)) // 2
+        fig, axes = plt.subplots(plots, 1, figsize=(10, 4*num_agents), sharex=True)
+
+        remove_from_comparison = []
+        i = 0
+        
+        for agent in agent_trajectories.keys():
+
+            for other_agents in agent_trajectories.keys():
+
+                if agent != other_agents and other_agents not in remove_from_comparison:
+                    
+                    if plots == 1:
+                        axes.plot(np.linalg.norm(np.array(agent_trajectories[agent]).T - np.array(agent_trajectories[other_agents]).T, axis = 1), label=f'||x_{agent} - x_{other_agents}||')
+                        axes.set_ylabel(f'Distance between drones {agent} and {other_agents}')
+                        axes.legend()
+                        axes.grid(True)
+                        #axes.xticks([x * dt for x in len(agent_trajectories[agent][0])])
+                        axes.set_xlabel('t [s]')
+                    else:
+                        axes[i].plot(np.linalg.norm(np.array(agent_trajectories[agent]).T - np.array(agent_trajectories[other_agents]).T, axis = 1), label=f'||x_{agent} - x_{other_agents}||')
+                        axes[i].set_ylabel(f'Distance between drones {agent} and {other_agents}')
+                        axes[i].legend()
+                        axes[i].grid(True)
+                        #axes[-1].xticks([x * dt for x in len(agent_trajectories[agent][0])])
+                        axes[-1].set_xlabel('t [s]')
+                        i += 1
+        
+            remove_from_comparison.append(agent)
+        
+        plt.suptitle('Plotting of distances between all drones')
+        plt.tight_layout()
+        plt.show()
 
     # Visualize the trajectories
     fig, axes = plt.subplots(1, 2, figsize=(15,7), dpi=70, tight_layout=True)
@@ -651,7 +801,7 @@ def main(args=None):
 
     phi_recon = plot_trajectories(cfcontroller.grids, cfcontroller.ks, cfcontroller.ck_list_updates, cfcontroller.it, cfcontroller.rate,
                       cfcontroller.hk_list, cfcontroller.L_list, cfcontroller.grids_x, cfcontroller.grids_y, cfcontroller.pdf_values,
-                      cfcontroller.num_agents, cfcontroller.trajectories, cfcontroller.metric_logs, cfcontroller.control_inputs)
+                      len(cfcontroller.CF_DICT), cfcontroller.trajectories, cfcontroller.metric_logs, cfcontroller.control_inputs)
 
     # Saved data in JSON
 
@@ -672,7 +822,7 @@ def main(args=None):
             "gamma": cfcontroller.gamma,
             "h_pow": cfcontroller.h_pow,
             "L_list": cfcontroller.L_list.tolist(),
-            "num_agents": cfcontroller.num_agents
+            "num_agents": len(cfcontroller.CF_DICT)
         }
     }
 
@@ -686,6 +836,7 @@ def main(args=None):
 
     cfcontroller.destroy_node()
     rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()
