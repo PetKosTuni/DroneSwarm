@@ -761,8 +761,8 @@ class StTargetPointInput(RPW):
             print(f"State: CF_TARGET_POINT_INPUT, Adding Target Point at ({px}, {py})")
             if self.img_target_input is not None:
 
-                px_loc = round((px - 400) / 166, 1)
-                py_loc = round((-py + 300) / 125, 1)
+                px_loc = round((px - 400) / 133, 1)
+                py_loc = round((-py + 300) / 100, 1)
 
                 # Update the image with the new target point
                 cv.circle(self.img_target_input, (px, py), 5, (0, 0, 255), -1)
@@ -776,7 +776,7 @@ class StTargetPointInput(RPW):
                 cv.waitKey(1)  # Ensure the window refreshes to show the changes
 
                 # Store the coordinates in the list
-                self.current_target_points.append([px_loc + 1.2, py_loc + 1.2])
+                self.current_target_points.append([px_loc + 1.5, py_loc + 1.5])
 
     #test
     def finalize_current_group(self):
