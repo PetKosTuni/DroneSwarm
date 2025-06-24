@@ -100,7 +100,6 @@ def main(args=None):
     colors = ['C7', 'C4', 'C2', 'C2', 'C5', 'C6', 'C7', 'C8', 'C1']
 
     # Change to proper filepath
-    print(os.getcwd())
     with open('ergodic_test_record_jun19_video.json', 'r') as file:
         data = json.load(file)
     with open('points_jun19_video.json', 'r') as file2:
@@ -125,7 +124,6 @@ def main(args=None):
     threat_radius = 0.6
     wall_distance = 0.17
 
-    #metric_logs = ergodic_metric[0:3*len(control_inputs["cf5"][0]):3] + ergodic_metric[3*len(control_inputs["cf5"][0])::2]
     metric_logs = ergodic_metric[0:3*len(control_inputs["cf3"][0]):3] + ergodic_metric[3*len(control_inputs["cf3"][0])::2]
     max_time = 120
     locs = np.arange(0, max_time + 10, step=10)
