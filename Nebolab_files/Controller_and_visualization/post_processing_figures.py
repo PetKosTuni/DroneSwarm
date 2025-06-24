@@ -21,7 +21,11 @@ def plot_trajectory_snapshot(ax, agent_trajectories, slice_left, slice_right, pd
         # Check if trajectory data exists before plotting
         if agent_trajectories[agent][0] and agent_trajectories[agent][1]:  # Check if lists are not empty
             ax.plot(agent_trajectories[agent][0][slice_right], agent_trajectories[agent][1][slice_right], linestyle='', marker='o', markersize=15, color=colors[i], alpha=1.0, label=f'Drone {i+1} end')
-            if agent != 'cf1' or slice_left == 0:
+            if agent != 'cf3' or slice_left == 0:
+
+                # remove following line if the legend is too crowded
+                ax.plot(agent_trajectories[agent][0][slice_left], agent_trajectories[agent][1][slice_left], linestyle='', marker='o', markersize=10, color=colors[i], alpha=1.0, label=f'Drone {i+1} start')
+
                 ax.plot(agent_trajectories[agent][0][slice_left:slice_right], agent_trajectories[agent][1][slice_left:slice_right], linestyle='--', marker='', color=colors[i], alpha=1, label=f'Drone {i+1} trajectory')
         else:
             print(f"Warning: No trajectory data for drone {agent}")
@@ -89,15 +93,17 @@ def main(args=None):
     plt.rcParams['axes.titlesize']=24
     plt.rcParams['axes.labelsize']=24
     plt.rcParams['legend.fontsize']=20
+    plt.rcParams['legend.framealpha']=0.6
     plt.rcParams['lines.linewidth']=2.8
     plt.rcParams['figure.titlesize']=18
 
     colors = ['C7', 'C4', 'C2', 'C2', 'C5', 'C6', 'C7', 'C8', 'C1']
 
     # Change to proper filepath
-    with open('data.json', 'r') as file:
+    print(os.getcwd())
+    with open('ergodic_test_record_jun19_video.json', 'r') as file:
         data = json.load(file)
-    with open('points.json', 'r') as file2:
+    with open('points_jun19_video.json', 'r') as file2:
         points = json.load(file2)
 
     agent_trajectories = data["trajectories"]
@@ -117,10 +123,11 @@ def main(args=None):
     gamma = data["parameters"]["gamma"]
     h_pow = data["parameters"]["h_pow"]
     threat_radius = 0.6
-    wall_distance = 0.15
+    wall_distance = 0.17
 
-    metric_logs = ergodic_metric[:3*len(control_inputs["cf1"][0]):3] + ergodic_metric[3*len(control_inputs["cf1"][0])::2]
-    max_time = len(metric_logs) * dt
+    #metric_logs = ergodic_metric[0:3*len(control_inputs["cf5"][0]):3] + ergodic_metric[3*len(control_inputs["cf5"][0])::2]
+    metric_logs = ergodic_metric[0:3*len(control_inputs["cf3"][0]):3] + ergodic_metric[3*len(control_inputs["cf3"][0])::2]
+    max_time = 120
     locs = np.arange(0, max_time + 10, step=10)
 
     # Plot the ergodic metric for all agents
@@ -128,7 +135,7 @@ def main(args=None):
     plt.plot(metric_logs, label=f'Ergodic Metric over time')
     plt.xticks(locs / dt, [x for x in locs])
     plt.xlabel('t [s]')
-    plt.ylabel('Ergodic Metric [%]')
+    plt.ylabel('Ergodic Metric Ratio')
     plt.title('Ergodic Metric')
     plt.legend()
     plt.grid(True)
@@ -187,7 +194,7 @@ def main(args=None):
             axes.grid(True)
             axes.set_xticks(locs / dt, [x for x in locs])
             axes.set_xlabel('t [s]')
-            axes.axhline(y = umax, color = 'r', linestyle = 'dashed', label=f'$u_{{{string}}}$ = ' + str(umax) + 'm')
+            axes.axhline(y = umax, color = 'r', linestyle = 'dashed', label=f'$u_{{{string}}}$ = ' + str(umax) + 'm/s')
             axes.axvline(x = 1000, color = 'black', linestyle = 'dashed', label= 'Drone 1 landing at ' + str(1000 * dt) + 's')
             axes.legend()
         else:
@@ -195,9 +202,9 @@ def main(args=None):
             axes[i].set_ylabel(f'||$u_{{{drone_index}}}$|| [m]')
             axes[i].grid(True)
             axes[i].set_xticks(locs / dt, [x for x in locs])
-            axes[i].axhline(y = umax, color = 'r', linestyle = 'dashed', label=f'$u_{{{string}}}$ = ' + str(umax) + 'm')
-            if i == 0:
-                axes[i].axvline(x = 1000, color = 'black', linestyle = 'dashed', label= 'Drone 1 landing at ' + str(1000 * dt) + 's')
+            axes[i].axhline(y = umax, color = 'r', linestyle = 'dashed', label=f'$u_{{{string}}}$ = ' + str(umax) + 'm/s')
+            if i == 1:
+                axes[i].axvline(x = 1150, color = 'black', linestyle = 'dashed', label= 'Drone 2 landing at ' + str(1150 * dt) + 's')
             axes[i].legend()
 
             axes[-1].set_xlabel('t [s]')
@@ -305,7 +312,7 @@ def main(args=None):
                         axes.plot(np.linalg.norm(np.array(agent_trajectories[agent][:-1]) - np.array(agent_trajectories[other_agents][:-1]), axis = 0))
                         axes.set_ylabel(f'||$p_{drone_index} - p_{other_index}$|| [m]')
                         axes.axhline(y = safety_distance, color = 'r', linestyle = 'dashed', label= f'$R_s$ = ' + str(safety_distance) + 'm')
-                        axes.axvline(x = 1000, color = 'black', linestyle = 'dashed', label= 'landing at ' + 1000 * dt + 's')
+                        axes.axvline(x = 1150, color = 'black', linestyle = 'dashed', label= 'landing at ' + 1150 * dt + 's')
                         axes.legend()
                         axes.grid(True)
                         axes.set_xticks(locs / dt, [x for x in locs])
@@ -314,8 +321,8 @@ def main(args=None):
                         axes[i].plot(np.linalg.norm(np.array(agent_trajectories[agent][:-1]) - np.array(agent_trajectories[other_agents][:-1]), axis = 0))
                         axes[i].set_ylabel(f'||$p_{drone_index} - p_{other_index}$|| [m]')
                         axes[i].axhline(y = safety_distance, color = 'r', linestyle = 'dashed', label= f'$R_s$ = ' + str(safety_distance) + 'm')
-                        if agent == "cf1":
-                            axes[i].axvline(x = 1000, color = 'black', linestyle = 'dashed', label= 'Drone 1 landing at ' + str(1000 * dt) + 's')
+                        if (other_agents) == "cf3" or agent == "cf3":
+                            axes[i].axvline(x = 1150, color = 'black', linestyle = 'dashed', label= 'Drone 2 landing at ' + str(1150 * dt) + 's')
                         axes[i].legend()
                         axes[i].grid(True)
                         axes[-1].set_xticks(locs / dt, [x for x in locs])
@@ -345,6 +352,10 @@ def main(args=None):
         if agent_trajectories[agent][0] and agent_trajectories[agent][1]:  # Check if lists are not empty
             ax.plot(agent_trajectories[agent][0], agent_trajectories[agent][1], linestyle='-', marker='', color=colors[i], alpha=0.4, label=f'Drone {i+1}')
             ax.plot(agent_trajectories[agent][0][0], agent_trajectories[agent][1][0], linestyle='', marker='o', markersize=15, color=colors[i], alpha=1.0, label=f'Drone {i+1} start')
+
+            # remove following line if the legend is too crowded
+            ax.plot(agent_trajectories[agent][0][-1], agent_trajectories[agent][1][-1], linestyle='', marker='o', markersize=10, color=colors[i], alpha=1.0, label=f'Drone {i+1} end')
+
         else:
             print(f"Warning: No trajectory data for drone {agent}")
         i += 1
@@ -364,6 +375,10 @@ def main(args=None):
         if agent_trajectories[agent][0] and agent_trajectories[agent][1]:  # Check if lists are not empty
             ax.plot(agent_trajectories[agent][0], agent_trajectories[agent][1], linestyle='-', marker='', color=colors[i], alpha=0.4, label=f'Drone {i+1}')
             ax.plot(agent_trajectories[agent][0][0], agent_trajectories[agent][1][0], linestyle='', marker='o', markersize=15, color=colors[i], alpha=1.0, label=f'Drone {i+1} start')
+
+            # remove following line if the legend is too crowded
+            ax.plot(agent_trajectories[agent][0][-1], agent_trajectories[agent][1][-1], linestyle='', marker='o', markersize=10, color=colors[i], alpha=1.0, label=f'Drone {i+1} end')
+            
         else:
             print(f"Warning: No trajectory data for drone {agent}")
         i += 1
@@ -375,10 +390,10 @@ def main(args=None):
     fig, axes = plt.subplots(1, 3, figsize=(25,9), dpi=70, tight_layout=True)
 
     ax1 = axes[0]
-    plot_trajectory_snapshot(ax1, agent_trajectories, 0, 1000, pdf_values, grids_x, grids_y, L_list, dt, colors)
+    plot_trajectory_snapshot(ax1, agent_trajectories, 0, 1150, pdf_values, grids_x, grids_y, L_list, dt, colors)
 
     ax2 = axes[1]
-    plot_trajectory_snapshot(ax2, agent_trajectories, 1000, 2000, pdf_values, grids_x, grids_y, L_list, dt, colors)
+    plot_trajectory_snapshot(ax2, agent_trajectories, 1150, 2000, pdf_values, grids_x, grids_y, L_list, dt, colors)
 
     ax3 = axes[2]
     plot_trajectory_snapshot(ax3, agent_trajectories, 2000, 3000, pdf_values, grids_x, grids_y, L_list, dt, colors)
